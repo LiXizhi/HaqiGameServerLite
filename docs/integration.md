@@ -1,5 +1,7 @@
 # 三个项目共享服务器
 
+通用私有账号房间使用 `roomType:"account"` 与 `account.relay.v1`，任意应用可独立演进payload协议；服务器只认证、隔离及中继。参见 [私有房间协议](private-rooms.md) 与部署记录。
+
 HaqiCombatSim、AI-work-company 和 AIChat 使用同一部署的网关及世界服。各项目配置网关 URL，无需相互引用源码，也无需各自启动一份服务器。2026-10-23 Haqi 本地正式入口已接入认证连接；AI-work-company 和 AIChat 仍待各自接入。Haqi 网页尚未发布本轮修改。
 
 ## 2026-10-23 账号认证（当前公网必需）
@@ -8,11 +10,18 @@ HaqiCombatSim、AI-work-company 和 AIChat 使用同一部署的网关及世界�
 
 服务端固定请求 `https://api.keepwork.com/core/v0/users/profile`，禁止重定向，8秒超时；返回的 `username` 必须与提交值严格一致。缺少/失效token、用户名不匹配返回401，上游不可用返回503，均拒绝入场。依据 KeepworkSDK 的 `src/core/keepworkSDK.core.ts` 和 `src/core/api-origin.ts`，不是本地解析JWT或信任SDK缓存。
 
-成功应答含服务端生成的 `playerId`、`username`、`instanceId`、WSS `url`、一次性 `ticket`。票据用进程内随机密钥HMAC签名，有效期60秒，绑定账号、项目、角色派生ID、房间及实例；世界服校验并消费票据，拒绝复用/篡改/绕过网关。密钥不落盘，服务重启后旧票据失效；当前同进程多世界服共享验票器，独立进程部署须先设计密钥与票据消费共享。已连接会话最长一小时，之后重连再次核验token；不宣称Keepwork注销可即时踢出其他现存连接。
+成功应答含服务端生成的 `playerId`、`username`、`instanceId`、WSS `url`、一次性 `ticket`。票据用进程内随机密钥HMAC签名，有效期60秒，绑定账号、项目、角色、独立连接ID、房间及实例；世界服校验并消费票据，拒绝复用/篡改/绕过网关。密钥不落盘，服务重启后旧票据失效；当前同进程多世界服共享验票器，独立进程部署须先设计密钥、票据消费和账号连接名额的共享。已连接会话最长一小时，之后重连再次核验token；不宣称Keepwork注销可即时踢出其他现存连接。
 
-hello 使用应答的 playerId/instanceId/ticket，token仅用于HTTPS请求头，不进入WebSocket URL、日志或存档。客户端角色编号仅用于账号内区分连接，**尚未查云端角色目录证明角色存在或拥有某项游戏资产**；本轮验收是账号token与用户名一致，不是战斗/资产授权。
+hello 使用应答的 playerId/instanceId/ticket，token仅用于HTTPS请求头，不进入WebSocket URL、日志或存档。每次鉴权生成独立的随机 playerId，Haqi 同账号同角色新入场会由服务器替换旧连接（大厅除外），重连也会得到新的 playerId。客户端角色编号用于标识账号内业务角色，**尚未查云端角色目录证明角色存在或拥有某项游戏资产**；本轮验收是账号token与用户名一致，不是战斗/资产授权。
 
-`PRESENCE_ALLOWED_ORIGINS` 精确配置页面origin，允许Authorization预检；公网HTTP旧端口返回426。`PRESENCE_PUBLIC_SOCKET_URL` 支持 `{port}`，当前代理支持8798–8817，新增超出范围的世界服需先增加代理路由。认证默认在 `startPresence` 开启；低层 `startGateway/startGameServer` 的 `auth:null` 仅用于隔离协议测试，不得用它替代生产启动入口。
+`PRESENCE_ALLOWED_ORIGINS=*` 为默认及当前公网策略：允许任意页面来源（包括127.0.0.1任意端口、任意IP/域名和null Origin）进行Authorization预检，仅对 `/api/join` 返回 `Access-Control-Allow-Origin: *`，不启用跨域Cookie。所有POST仍向Keepwork验证Bearer token及username；管理接口不继承CORS。显式来源列表仍可用于隔离部署；`auth:null`不会启用通配来源。公网HTTP旧端口返回426。`PRESENCE_PUBLIC_SOCKET_URL` 支持 `{port}`，当前代理支持8798–8817，新增超出范围的世界服需先增加代理路由。认证默认在 `startPresence` 开启；低层 `startGateway/startGameServer` 的 `auth:null` 仅用于隔离协议测试，不得用它替代生产启动入口。
+
+
+### 同账号最多10个客户端（用户约定2026-10-23）
+
+按Keepwork返回并核验一致的username计数，跨角色、项目、token、同进程多个世界服合并计算；不是按IP限流。同一账号、同一角色最多10条在场连接，每条拥有独立playerId。网关获取票据尚不占连接名额，世界服消费一次性票据后同步占位，第11个hello返回 `reject / account-connection-limit` 并关闭新连接，不踢走已有客户端。断线、超时、会话到期、服务关闭和首次入场失败都会释放名额；释放幂等，批量并发入场不得超过10条。客户端应提示关闭其他客户端再重试，不把容量拒绝当作token无效。
+
+当前生产网关及其多个世界服在同一Node进程中，复用同一个auth对象管理名额。未来多进程/多机器扩容必须共享原子名额账本，不能每个进程各放10条而宣称全局上限。这里的客户端数是游戏服连接数，不改变云存档现有写入模型。
 
 ```js
 const client = createPresenceClient({gatewayUrl: 'https://us1.gameserver.keepwork.com'});
@@ -59,3 +68,11 @@ const heartbeat = setInterval(() => {
 网关仅对允许的页面源提供 `/api/join` CORS，生产地址与HTTPS/WSS见上节及部署记录；控制面接口仍由反向代理禁止公网访问。
 
 当前 SDK 是最小客户端：不会自动重连或维护完整角色 UI，调用方需处理关闭/重连、角色切换与消息生命周期。现有服务不替代 Keepwork 登录/云存档，也不替代 AI-work-company 的业务后端。
+
+## 2026-10-24 实例目录与选择（本地实现，未部署）
+
+GET `/api/instances?page=1&pageSize=20` 返回 `{page,pageSize,pages,total,instances:[{id,playerCount,capacity,status}]}`；页大小1–100，页码夹取到有效范围，按真实数字编号升序，不补造不存在的服务器。仅公开汇总信息，沿用入场来源策略，允许GET/OPTIONS，不开放管理CORS。默认400/500人为拥挤、500/500为已满；机器总容量耗尽也显示已满；待开启/正在迁移实例显示维护。人数为最近心跳快照，不预留容量。
+
+POST `/api/join` 可附加正整数 `instanceId`，保持原Keepwork鉴权及绑定该实例的一次性票据。不存在、满员、维护或过期目标明确失败，不自动换服。客户端重新获取票据，收到匹配 `welcome.instanceId` 才显示连接成功；`migrate` 表示服务端后续迁移。手动切服先断旧连接，以免同账号10客户端限额阻止切换。
+
+部署需允许反向代理公开 GET/OPTIONS `/api/instances`；管理路由继续隔离。本地测试覆盖分页/选择及原认证，尚未验收公网账号切服。

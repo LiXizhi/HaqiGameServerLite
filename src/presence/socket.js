@@ -86,8 +86,11 @@ function createConnection(socket, onFinished, options) {
         },
         sendFrame(frame) {
             if (finished) return false;
-            if (socket.writableLength > options.relayDropBytes) return false;
-            return socket.write(frame);
+            // Bound the queue including this frame, before handing it to TCP.
+            // write(false) means queued with backpressure, not a dropped frame.
+            if (socket.writableLength + frame.length > options.relayDropBytes) return false;
+            socket.write(frame);
+            return true;
         },
         close() {
             if (finished) return;

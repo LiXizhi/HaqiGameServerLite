@@ -63,17 +63,19 @@ function pausedSocket(port) {
             );
         });
         let buffer = Buffer.alloc(0);
-        socket.on('data', chunk => {
+        const onData = chunk => {
             buffer = Buffer.concat([buffer, chunk]);
             if (!buffer.includes('\r\n\r\n')) return;
+            socket.removeListener('data', onData);
             socket.pause();
             resolve(socket);
-        });
+        };
+        socket.on('data', onData);
         socket.on('error', reject);
     });
 }
 
-test('one world server relays 8000 players inside the one-second budget', {timeout: 180000}, async () => {
+test('one world server relays 8000 players inside the one-second budget', {timeout: 180000}, async t => {
     const clusteredCount = {frames: 0, bytes: 0, max: 0};
     const clustered = createHost({catalog, machineId: 'capacity'});
     fill(clustered, loadSink(clusteredCount), index => ({x: (index % 20) * 20, y: Math.floor(index / 20) * 20}));
@@ -92,6 +94,7 @@ test('one world server relays 8000 players inside the one-second budget', {timeo
     for (let tick = 0; tick < 6; tick += 1) spread.relay(0);
     const farMs = relayMs(spread);
     assert.ok(farMs < 800, `spread far relay ${farMs.toFixed(1)} ms`);
+    t.diagnostic(`relay: clustered=${clusterMs.toFixed(1)}ms near=${nearMs.toFixed(1)}ms far=${farMs.toFixed(1)}ms`);
 
     let connection = null;
     const slow = await startSocketServer({
@@ -103,12 +106,23 @@ test('one world server relays 8000 players inside the one-second budget', {timeo
     });
     const paused = await pausedSocket(slow.port);
     try {
-        const bulky = encodeTextFrame('x'.repeat(32000));
-        let dropped = false;
-        for (let attempt = 0; attempt < 80 && !dropped; attempt += 1) {
-            if (connection.sendFrame(bulky) === false) dropped = true;
+        // The limit includes the next frame even when the OS send buffer is empty.
+        assert.equal(connection.sendFrame(encodeTextFrame('x'.repeat(32000))), false);
+        const frame = encodeTextFrame('x'.repeat(500));
+        let dropped = false, accepted = 0;
+        for (let attempt = 0; attempt < 100000 && !dropped; attempt += 1) {
+            if (connection.sendFrame(frame) === false) dropped = true;
+            else accepted++;
+            assert.ok(connection.bufferedAmount <= 1024, 'relay queue must stay within 1024 bytes');
         }
-        assert.equal(dropped, true);
+        assert.ok(accepted > 0, 'normal frames must be accepted before backpressure');
+        assert.equal(dropped, true, 'paused reader eventually causes actual queue drops');
+        paused.resume();
+        const drainDeadline = Date.now() + 5000;
+        while (connection.bufferedAmount && Date.now() < drainDeadline) await new Promise(resolve => setTimeout(resolve, 10));
+        assert.equal(connection.bufferedAmount, 0);
+        assert.equal(connection.sendFrame(frame), true, 'sending resumes after the queue drains');
+        t.diagnostic(`slow reader: accepted=${accepted}, queue bounded, resumed after drain`);
     } finally {
         paused.destroy();
         await slow.close();
@@ -177,6 +191,7 @@ test('one world server relays 8000 players inside the one-second budget', {timeo
         for (const socket of connections) socket.sendFrame(frame);
         const fanoutMs = performance.now() - fanoutStarted;
         assert.ok(fanoutMs < 1000, `fanout ${fanoutMs.toFixed(1)} ms`);
+        t.diagnostic(`8000 socket fanout=${fanoutMs.toFixed(1)}ms`);
         const relayDeadline = Date.now() + 20000;
         while (relays < PLAYERS && Date.now() < relayDeadline) {
             await new Promise(resolve => setTimeout(resolve, 20));

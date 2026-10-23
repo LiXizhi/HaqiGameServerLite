@@ -47,10 +47,15 @@ export async function startGameServer({
             let identity = null;
             let authenticating = false;
             let sessionTimer;
+            let releaseSession;
+            let admitted = false;
+            let privatePeer = null;
             const sink = {
                 send(message) {
                     if (socket.readyState === 1) {
+                        if (message.type === 'welcome') releaseSession?.activate?.();
                         socket.send(JSON.stringify(message));
+                        if (message.type === 'welcome') admitted = true;
                         if (message.type === 'welcome') analytics?.enter(socket, identity);
                     }
                 },
@@ -77,6 +82,7 @@ export async function startGameServer({
                 if (socket.readyState !== 1) { authenticating = false; return; }
                 try {
                     message = JSON.parse(data.toString());
+                    if (!message || typeof message.type !== 'string') throw new Error('message');
                 } catch {
                     sink.send({type: 'reject', reason: 'message'});
                     authenticating = false;
@@ -87,22 +93,43 @@ export async function startGameServer({
                         if (message.type === 'hello') {
                             if (identity) throw new Error('already-connected');
                             identity = auth.consume(message.ticket, message);
+                            releaseSession = auth.openSession(identity, () => {
+                                sink.send({type: 'reject', reason: 'replaced'});
+                                sim.disconnect(sink, 'replaced');
+                                socket.close();
+                            });
                             // Reconnect periodically to revalidate the upstream account.
                             sessionTimer = setTimeout(() => socket.close(), 60 * 60 * 1000);
                             sessionTimer.unref?.();
                         } else if (!identity) throw new Error('auth-required');
                         if (message.type === 'enterRoom' && !message.roomId?.startsWith(`${identity.project}:`)) throw new Error('room');
-                    } catch {
-                        sink.send({type: 'reject', reason: 'auth-required'});
+                    } catch (error) {
+                        sink.send({type: 'reject', reason: error.message === 'account-connection-limit'
+                            ? 'account-connection-limit' : 'auth-required'});
                         socket.close();
                         authenticating = false;
                         return;
                     }
                 }
-                sim.handle(sink, message, now());
+                if (!auth && (message.roomType === 'account' || message.roomId === 'account' || message.roomId?.startsWith('account:'))) {
+                    sink.send({type: 'reject', reason: 'auth-required'}); socket.close(); return;
+                }
+                if (identity?.roomType === 'account') {
+                    try {
+                        if (message.type === 'hello') privatePeer = auth.privateRooms.connect(identity, sink);
+                        else if (!privatePeer) throw Error('private-room-forbidden');
+                        else privatePeer.handle(message);
+                    } catch (error) {
+                        sink.send({type: 'reject', reason: error.message, requestId: message.requestId});
+                        if (message.type === 'hello' || message.type === 'enterRoom') socket.close();
+                    }
+                } else sim.handle(sink, message, now());
+                // Invalid room/position/full instance must not retain a reserved
+                // account slot after a failed initial hello.
+                if (auth && message.type === 'hello' && !admitted) socket.close();
                 authenticating = false;
             });
-            socket.on('close', () => { analytics?.leave(socket); clearTimeout(sessionTimer); sim.disconnect(sink); });
+            socket.on('close', () => { privatePeer?.close(); releaseSession?.(); analytics?.leave(socket); clearTimeout(sessionTimer); sim.disconnect(sink); });
         },
     });
     const addressPort = sockets.port;

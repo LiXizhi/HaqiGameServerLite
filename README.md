@@ -1,5 +1,7 @@
 # HaqiGameServerLite
 
+通用私有账号房间使用 `roomType:"account"` 与 `account.relay.v1`，任意应用可独立演进payload协议；服务器只认证、隔离及中继。参见 [私有房间协议](docs/private-rooms.md) 与部署记录。
+
 供 **HaqiCombatSim、AI-work-company 和 AIChat** 共用的轻量在场服务器。网关分配实例，世界服同步玩家外观、房间和移动，管理页查看状态并调整实例。无运行时第三方依赖，不依赖任一业务项目的源码或构建产物。
 
 当前只提供临时在场状态，不保存账号、业务数据或战斗结果。三个项目的正式页面尚未接入；迁出服务器不会自动改变客户端行为。

@@ -55,6 +55,11 @@ function render(state) {
     pauseButton.onclick = () => post({op: 'pause', paused: !state.paused});
 
     machines.replaceChildren();
+    for (const room of state.privateRooms || []) {
+        const section = document.createElement('section'); section.className = 'machine card';
+        section.append(line(`私有房间 · ${room.ownerUsername} · ${room.count} 个客户端`));
+        machines.append(section);
+    }
     if (!state.machines.length) {
         const empty = document.createElement('p');
         empty.className = 'empty';
@@ -136,7 +141,7 @@ function render(state) {
 }
 
 async function refresh() {
-    const response = await fetch('/api/admin/state', {cache: 'no-store'});
+    const response = await fetch('/api/admin/state', {cache: 'no-store', headers: headers()});
     render(await response.json());
 }
 

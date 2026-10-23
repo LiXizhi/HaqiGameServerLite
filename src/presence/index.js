@@ -1,7 +1,7 @@
 // Local dev entry: one gateway and one stateless game server on this machine.
 
 import {execFile} from 'node:child_process';
-import {connect} from 'node:net';
+import {connect, getDefaultAutoSelectFamilyAttemptTimeout, setDefaultAutoSelectFamilyAttemptTimeout} from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {createRegistry} from './gateway/registry.js';
 import {startGateway} from './gateway/server.js';
@@ -9,6 +9,11 @@ import {createLocalSpawner} from './gateway/spawn.js';
 import {loadRoomCatalog} from './protocol.js';
 import {createAnalytics} from './analytics/index.js';
 import {createAuthentication} from './auth.js';
+
+// US -> Keepwork TCP handshakes can exceed Node's 250ms address-attempt
+// default. Abandoning IPv4 early then hitting unreachable IPv6 caused 503s.
+// Preserve larger operator settings and the authentication request's 8s limit.
+setDefaultAutoSelectFamilyAttemptTimeout(Math.max(1500, getDefaultAutoSelectFamilyAttemptTimeout()));
 
 function execText(file, args) {
     return new Promise(resolve => {
@@ -104,7 +109,7 @@ export async function startPresence({
     gamePort = Number(process.env.PRESENCE_GAME_PORT || 8798),
     machineId = process.env.PRESENCE_MACHINE_ID || 'local-1',
     auth = createAuthentication(),
-    allowedOrigins = (process.env.PRESENCE_ALLOWED_ORIGINS || 'https://cdn.keepwork.com,https://keepwork.com').split(',').filter(Boolean),
+    allowedOrigins = (process.env.PRESENCE_ALLOWED_ORIGINS || '*').split(',').map(value => value.trim()).filter(Boolean),
     publicSocketUrl = process.env.PRESENCE_PUBLIC_SOCKET_URL || '',
     analytics = null,
 } = {}) {

@@ -215,7 +215,8 @@ export function createRegistry({limits = LIMITS, catalog, now = () => Date.now()
             }
         },
 
-        join({playerId, roomId, x, y, at = now()}) {
+        join({playerId, roomId, x, y, instanceId = null, at = now()}) {
+            if (instanceId !== null && (!Number.isSafeInteger(instanceId) || instanceId < 1)) return {ok: false, error: 'instance'};
             this.dropStale(at);
             if (!validPlayerId(playerId)) return {ok: false, error: 'player'};
             if (!validRoomId(roomId, catalog)) return {ok: false, error: 'room'};
@@ -226,7 +227,9 @@ export function createRegistry({limits = LIMITS, catalog, now = () => Date.now()
             const candidates = [];
             for (const machine of ranked) {
                 if (machinePopulation(machine) >= limits.serverMax) continue;
+                if (instanceId !== null && machine.pendingUntil > at) continue;
                 for (const instance of machine.instances) {
+                    if (instanceId !== null && (instance.id !== instanceId || machine.pendingOpens.has(instance.id))) continue;
                     const count = population(instance);
                     if (count >= limits.instanceMax) continue;
                     candidates.push({
@@ -240,13 +243,14 @@ export function createRegistry({limits = LIMITS, catalog, now = () => Date.now()
             candidates.sort((a, b) => b.bucketCount - a.bucketCount || b.count - a.count || a.instance.id - b.instance.id);
             let chosen = candidates[0];
             if (!chosen) {
+                if (instanceId !== null) return {ok: false, error: 'instance-unavailable'};
                 const machine = ranked.find(entry => machinePopulation(entry) < limits.serverMax);
                 if (!machine) return {ok: false, error: machines.size ? 'server-full' : 'no-server'};
-                const instanceId = allocate();
-                machine.pendingOpens.add(instanceId);
-                machine.instances.push({id: instanceId, rooms: []});
-                enqueue(machine, at, {type: 'open', instanceId});
-                chosen = {machine, instance: {id: instanceId}};
+                const allocatedId = allocate();
+                machine.pendingOpens.add(allocatedId);
+                machine.instances.push({id: allocatedId, rooms: []});
+                enqueue(machine, at, {type: 'open', instanceId: allocatedId});
+                chosen = {machine, instance: {id: allocatedId}};
             }
             return {
                 ok: true,
@@ -275,6 +279,21 @@ export function createRegistry({limits = LIMITS, catalog, now = () => Date.now()
             if (!plan) return {ok: false, error: 'unavailable'};
             schedule(machine, plan, at);
             return {ok: true};
+        },
+
+        listInstances({page = 1, pageSize = 20} = {}) {
+            this.dropStale();
+            pageSize = Math.max(1, Math.min(100, Math.floor(Number(pageSize)) || 20));
+            const entries = [...machines.values()].flatMap(machine => machine.instances.map(instance => {
+                const playerCount = population(instance);
+                const unavailable = machine.pendingOpens.has(instance.id) || machine.pendingUntil > now();
+                const full = playerCount >= limits.instanceMax || machinePopulation(machine) >= limits.serverMax;
+                return {id: instance.id, playerCount, capacity: limits.instanceMax,
+                    status: unavailable ? 'unavailable' : full ? 'full' : playerCount >= limits.growAt ? 'crowded' : 'green'};
+            })).sort((a, b) => a.id - b.id);
+            const pages = Math.max(1, Math.ceil(entries.length / pageSize));
+            page = Math.max(1, Math.min(pages, Math.floor(Number(page)) || 1));
+            return {page, pageSize, pages, total: entries.length, instances: entries.slice((page - 1) * pageSize, page * pageSize)};
         },
 
         state() {

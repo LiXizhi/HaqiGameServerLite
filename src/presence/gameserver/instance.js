@@ -42,7 +42,8 @@ export function createHost({catalog, limits = LIMITS, machineId = 'local'} = {})
 
     function rosterFrom(members) {
         const players = [];
-        for (const player of members) players.push({id: player.id, name: player.name});
+        for (const player of members) players.push({id: player.id, name: player.name, appearance: player.appearance,
+            revision: player.revision, x: player.x, y: player.y, facing: player.facing});
         players.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
         return players;
     }
@@ -381,9 +382,13 @@ export function createHost({catalog, limits = LIMITS, machineId = 'local'} = {})
         const cap = runtimeLimits.relayCap;
         const list = [];
         const grid = new Map();
+        let minCx = Infinity, maxCx = -Infinity, minCy = Infinity, maxCy = -Infinity;
         for (const player of members) {
             list.push(player);
-            const key = `${Math.floor(player.x / cell)}:${Math.floor(player.y / cell)}`;
+            const cx = Math.floor(player.x / cell), cy = Math.floor(player.y / cell);
+            minCx = Math.min(minCx, cx); maxCx = Math.max(maxCx, cx);
+            minCy = Math.min(minCy, cy); maxCy = Math.max(maxCy, cy);
+            const key = `${cx}:${cy}`;
             let bucket = grid.get(key);
             if (!bucket) grid.set(key, bucket = []);
             bucket.push(player);
@@ -392,11 +397,12 @@ export function createHost({catalog, limits = LIMITS, machineId = 'local'} = {})
         const tailSlots = cap - headSlots;
         for (const [key, bucket] of grid) {
             const [cx, cy] = key.split(':').map(Number);
-            let radius = 1;
-            let gathered = gatherCells(grid, cx, cy, radius);
-            while (gathered.length < cap && radius < 8) {
-                radius += 1;
-                gathered = gatherCells(grid, cx, cy, radius);
+            const gathered = [];
+            // Expand by rings instead of re-reading the entire square at every
+            // radius. Empty rows/columns beyond the occupied bounds need no lookup.
+            for (let radius = 0; radius <= 8; radius += 1) {
+                gatherCellRing(grid, cx, cy, radius, minCx, maxCx, minCy, maxCy, gathered);
+                if (radius >= 1 && gathered.length >= cap) break;
             }
             const origin = bucket[0];
             const ranked = [];
@@ -424,16 +430,15 @@ export function createHost({catalog, limits = LIMITS, machineId = 'local'} = {})
         }
     }
 
-    function gatherCells(grid, cx, cy, radius) {
-        const found = [];
-        for (let dx = -radius; dx <= radius; dx += 1) {
-            for (let dy = -radius; dy <= radius; dy += 1) {
-                const bucket = grid.get(`${cx + dx}:${cy + dy}`);
+    function gatherCellRing(grid, cx, cy, radius, minCx, maxCx, minCy, maxCy, found) {
+        for (let x = Math.max(minCx, cx - radius); x <= Math.min(maxCx, cx + radius); x += 1) {
+            for (let y = Math.max(minCy, cy - radius); y <= Math.min(maxCy, cy + radius); y += 1) {
+                if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) !== radius) continue;
+                const bucket = grid.get(`${x}:${y}`);
                 if (!bucket) continue;
                 for (const player of bucket) found.push(player);
             }
         }
-        return found;
     }
 
     function relayRoom(instance, tick) {
@@ -581,9 +586,9 @@ export function createHost({catalog, limits = LIMITS, machineId = 'local'} = {})
             if (message.type === 'appear') return appear(sink, message, now);
             send(sink, {type: 'reject', reason: 'message'});
         },
-        disconnect(sink) {
+        disconnect(sink, reason = 'disconnect') {
             if (sink?.replaced) return;
-            if (sink?.playerId) remove(sink.playerId, 'disconnect');
+            if (sink?.playerId) remove(sink.playerId, reason);
         },
         relay(now) {
             void now;

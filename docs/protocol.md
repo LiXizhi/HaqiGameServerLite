@@ -43,3 +43,14 @@ npm run presence
 3. 用 `move`、`enterRoom`、`leaveRoom`、`appear` 更新。`appear` 是不超过 2 KB 的 JSON 对象。
 
 服务器会发送 `welcome`、`roster`、`relay`、`joined`、`left`、`notice` 和 `migrate`。同机迁移不更换这条 WebSocket。
+
+
+2026-10-24：拥挤房间的格子查询只扫描扩展的新圈并裁掉空坐标边界，原近邻/轮换名单保持不变。移动帧的排队预算检查包含本帧字节数；超过预算才返回丢帧，底层TCP write返回false表示已排队的背压，不能计作丢帧。恢复读取、积压清空后可以继续发送。
+
+### 2026-10-24 Haqi 同角色接管
+
+同一核验 username + haqi + roleId 的新连接成功入场时，旧连接收到 `reject/replaced` 后关闭，并通过原离房消息通知房间其他玩家。客户端须返回登录入口，禁止自动重连。`lobby` 不参与接管；不同角色仍共享账号10连接上限。无效 hello 不接管。当前共享范围为同一网关进程启动的世界服，跨独立进程需要共享原子会话服务。
+
+### 通用账号房间
+
+`roomType:"account"`选择独立于游戏空间的私有账号传输，按verifiedUsername+project隔离。服务器只理解`account.relay.v1`外层信封，payload属于应用。任意应用无需服务端登记；不提供游戏移动、空间迁移或角色接管。完整入场、限流与封装见[私有账号房间](private-rooms.md)。

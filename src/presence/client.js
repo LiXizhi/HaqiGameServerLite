@@ -88,7 +88,7 @@ export function createPresenceClient({gatewayUrl, WebSocketImpl = globalThis.Web
                 ticket: assignment.ticket,
                 name: hello.name,
                 appearance: hello.appearance,
-                roomId: hello.roomId,
+                roomId: assignment.roomId || hello.roomId,
                 x: hello.x,
                 y: hello.y,
                 facing: hello.facing,

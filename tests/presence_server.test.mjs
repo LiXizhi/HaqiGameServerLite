@@ -416,3 +416,74 @@ test('the gateway process spawns another world server on a different port', asyn
         await presence.close();
     }
 });
+
+
+test('packed relay keeps the same nearest and rotating roster while expanding sparse cells', () => {
+    // Independent full-square reference: optimize lookup work, not who is visible.
+    const layouts = [i => ({x: (i - 50) * 100, y: 0}),
+        i => ({x: 0, y: (i - 50) * 100}),
+        i => ({x: (i % 12 - 6) * 210, y: (Math.floor(i / 12) - 4) * 170}),
+        i => ({x: (i % 12) * 12, y: Math.floor(i / 12) * 12})];
+    for (const layout of layouts) {
+        const sim = host();
+        const people = Array.from({length: 100}, (_, i) => ({id: `p${i}`, ...layout(i)}));
+        const clients = people.map(p => hello(sim, p.id, 'camp', p.x, p.y));
+        for (let tick = 1; tick <= 16; tick++) {
+            sim.relay(tick * 1000);
+            if (tick % 8) continue;
+            for (let i = 0; i < people.length; i++) {
+                const p = people[i], cx = Math.floor(p.x / 100), cy = Math.floor(p.y / 100);
+                const origin = people.find(q => Math.floor(q.x / 100) === cx && Math.floor(q.y / 100) === cy);
+                let candidates;
+                for (let radius = 1; radius <= 8; radius++) {
+                    candidates = people.filter(q => Math.abs(Math.floor(q.x / 100) - cx) <= radius
+                        && Math.abs(Math.floor(q.y / 100) - cy) <= radius);
+                    if (candidates.length >= LIMITS.relayCap) break;
+                }
+                candidates.sort((a,b) => Math.hypot(a.x-origin.x,a.y-origin.y)-Math.hypot(b.x-origin.x,b.y-origin.y)
+                    || (a.id < b.id ? -1 : 1));
+                const head = Math.min(48, candidates.length), expected = candidates.slice(0,head);
+                for (let offset = 0; offset < people.length && expected.length < head+16; offset++) {
+                    const other = people[(tick*16+offset)%people.length];
+                    if (!expected.includes(other)) expected.push(other);
+                }
+                assert.deepEqual(relays(clients[i]).at(-1).players.map(q => q.id), expected.map(q => q.id));
+            }
+        }
+    }
+});
+
+
+test('public instance pages are ordered, bounded and private; explicit selection never falls back', async () => {
+    let at = 100;
+    const registry = createRegistry({catalog, now: () => at});
+    registry.heartbeat({machineId: 'list-test', advertiseUrl: 'ws://127.0.0.1:1234',
+        instances: Array.from({length: 45}, (_, i) => ({id: i + 1, rooms: [{id: 'haqi:camp', buckets: [{key: '0:0', count: i === 0 ? 400 : i === 1 ? 500 : 0}]}]}))});
+    const page = registry.listInstances({page: 2, pageSize: 20});
+    assert.equal(page.total, 45); assert.equal(page.pages, 3);
+    assert.equal(page.instances[0].id, 21); assert.equal(page.instances.at(-1).id, 40);
+    assert.equal(registry.listInstances().instances[0].status, 'crowded');
+    assert.equal(registry.listInstances().instances[1].status, 'full');
+    const join = instanceId => registry.join({playerId: 'test', roomId: 'haqi:camp', x: 0, y: 0, instanceId});
+    assert.equal(join(23).instanceId, 23);
+    assert.equal(join(2).ok, false); assert.equal(join(9999).ok, false); assert.equal(join(1.5).ok, false);
+    const gateway = await startGateway({registry, auth: {}, allowedOrigins: ['*']});
+    try {
+        const response = await fetch(`${gateway.url}/api/instances?page=3&pageSize=20`, {headers: {Origin: 'http://127.0.0.1:3002'}});
+        assert.equal(response.headers.get('access-control-allow-origin'), '*');
+        const result = await response.json(); assert.equal(result.instances.length, 5);
+        assert.deepEqual(Object.keys(result.instances[0]).sort(), ['capacity', 'id', 'playerCount', 'status']);
+        const admin = await fetch(`${gateway.url}/api/admin/state`, {headers: {Origin: 'http://127.0.0.1:3002'}});
+        assert.equal(admin.headers.get('access-control-allow-origin'), null);
+    } finally { await gateway.close(); }
+    at += LIMITS.heartbeatTimeoutMs; assert.equal(registry.listInstances().total, 0);
+});
+
+test('late arrivals receive existing peers appearance and position without waiting for movement', () => {
+    const sim=host();
+    hello(sim,'alice','camp',100,200,1,{appearance:{bodyId:'test-body'},facing:2});
+    const bob=hello(sim,'bob','camp',150,200);
+    const peer=bob.messages.find(m=>m.type==='roster').players.find(p=>p.id==='alice');
+    assert.deepEqual(peer.appearance,{bodyId:'test-body'});
+    assert.equal(peer.x,100);assert.equal(peer.y,200);assert.equal(peer.facing,2);
+});

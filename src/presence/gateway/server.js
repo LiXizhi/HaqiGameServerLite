@@ -61,26 +61,36 @@ export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken
     const server = createServer(async (request, response) => {
         try {
             const url = new URL(request.url, 'http://127.0.0.1');
-            if (url.pathname === '/api/join') {
+            if (url.pathname === '/api/join' || url.pathname === '/api/instances') {
                 const origin = request.headers.origin;
-                if (origin && !allowedOrigins.includes(origin)) {
+                // Public, token-authenticated join only. Control/admin routes do
+                // not inherit this CORS policy; cookies are never enabled.
+                const anyOrigin = !!auth && allowedOrigins.includes('*');
+                if (origin && !anyOrigin && !allowedOrigins.includes(origin)) {
                     sendJson(response, 403, {ok: false, error: 'origin'}); return;
                 }
                 if (origin) {
-                    response.setHeader('Access-Control-Allow-Origin', origin);
+                    response.setHeader('Access-Control-Allow-Origin', anyOrigin ? '*' : origin);
                     response.setHeader('Vary', 'Origin');
-                    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+                    response.setHeader('Access-Control-Allow-Methods', url.pathname === '/api/instances' ? 'GET, OPTIONS' : 'POST, OPTIONS');
                     response.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
                 }
                 if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+                if (url.pathname === '/api/instances') {
+                    if (request.method !== 'GET') { sendJson(response, 405, {ok: false}); return; }
+                    sendJson(response, 200, registry.listInstances({page: url.searchParams.get('page'), pageSize: url.searchParams.get('pageSize')}));
+                    return;
+                }
                 if (request.method === 'POST' && auth) {
                     const body = await readBody(request);
                     const identity = await auth.verify(request.headers.authorization, body);
+                    if (identity.roomType === 'account') { body.roomId = identity.roomId; body.x = 0; body.y = 0; }
                     const result = registry.join({...body, playerId: identity.playerId});
                     if (!result.ok) { sendJson(response, 503, result); return; }
                     const socketUrl = publicSocketUrl.replace('{port}', new URL(result.url).port);
                     sendJson(response, 200, {...result, ...(socketUrl ? {url: socketUrl} : {}),
-                        playerId: identity.playerId, username: identity.username,
+                        playerId: identity.playerId, username: identity.username, roomId: body.roomId,
+                        ...(identity.roomType === 'account' ? {visibility: 'private', ownerUsername: identity.username, roomType: 'account', capabilities: ['account.relay.v1']} : {}),
                         ticket: auth.issue(identity, result, body.roomId)});
                     return;
                 }
@@ -117,6 +127,7 @@ export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken
             if (request.method === 'GET' && url.pathname === '/api/admin/state') {
                 const state = registry.state();
                 state.localServers = local ? local.list() : [];
+                if (adminToken && request.headers['x-admin-token'] === adminToken) state.privateRooms = auth?.privateRooms?.list() || [];
                 sendJson(response, 200, state);
                 return;
             }
@@ -145,6 +156,9 @@ export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken
             }
             if (request.method === 'POST' && (url.pathname === '/api/register' || url.pathname === '/api/heartbeat' || url.pathname === '/api/join')) {
                 const body = await readBody(request);
+                if (url.pathname === '/api/join' && (body.roomType === 'account' || body.roomId === 'account' || body.roomId?.startsWith('account:'))) {
+                    sendJson(response, 401, {ok: false, error: 'auth-required'}); return;
+                }
                 const result = url.pathname === '/api/register'
                     ? registry.register(body)
                     : url.pathname === '/api/heartbeat'
