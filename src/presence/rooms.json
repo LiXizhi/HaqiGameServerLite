@@ -1,0 +1,19 @@
+{
+  "regionSize": 2000,
+  "maxSpeed": 2500,
+  "homelandPrefix": "home:",
+  "defaultBounds": {"minX": -1000000, "minY": -1000000, "maxX": 1000000, "maxY": 1000000},
+  "rooms": [
+    {"id": "camp", "name": "魔法营地", "kind": "island"},
+    {"id": "town", "name": "哈奇岛", "kind": "island"},
+    {"id": "fire", "name": "火鸟岛", "kind": "island"},
+    {"id": "ice", "name": "寒冰岛", "kind": "island"},
+    {"id": "desert", "name": "沙漠岛", "kind": "island"},
+    {"id": "dark", "name": "幽暗岛", "kind": "island"},
+    {"id": "tide", "name": "潮汐岛", "kind": "island"},
+    {"id": "float", "name": "浮岸岛", "kind": "island"},
+    {"id": "sail", "name": "风帆岛", "kind": "island"},
+    {"id": "hanzi", "name": "字源岛", "kind": "island"},
+    {"id": "earth", "name": "现实世界", "kind": "island"}
+  ]
+}

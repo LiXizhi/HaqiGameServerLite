@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>在场网关</title>
+<link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+<header class="top">
+    <div>
+        <h1>在场网关</h1>
+        <p>管理已注册的世界服务器。游戏服不保存玩家档案，只同步同一房间里的外观和移动。</p>
+    </div>
+    <div class="tools">
+        <label>管理口令 <input id="token" type="password" autocomplete="off"></label>
+        <button id="add-server" type="button">增加本机世界服</button>
+        <button id="pause" type="button">暂停自动平衡</button>
+        <button id="refresh" type="button">刷新</button>
+    </div>
+</header>
+<section id="summary" class="summary"></section>
+<section id="machines"></section>
+<section>
+    <h2>最近平衡</h2>
+    <ol id="history"></ol>
+</section>
+<script src="/admin/admin.js"></script>
+</body>
+</html>

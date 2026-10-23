@@ -1,0 +1,28 @@
+{
+  "name": "haqi-game-server-lite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "供 HaqiCombatSim、AI-work-company 和 AIChat 共享的轻量在场服务器",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "exports": {
+    ".": "./src/presence/index.js",
+    "./client": "./src/presence/client.js",
+    "./gameserver": "./src/presence/gameserver/index.js"
+  },
+  "scripts": {
+    "start": "node src/presence/index.js",
+    "dev": "node --watch src/presence/index.js",
+    "presence": "node src/presence/index.js",
+    "test": "node --test tests/presence_server.test.mjs tests/shared_client.test.mjs",
+    "test:load": "node --test tests/presence_capacity.test.mjs",
+    "presence:load": "npm run test:load",
+    "test:all": "node --test tests/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LiXizhi/HaqiGameServerLite.git"
+  }
+}

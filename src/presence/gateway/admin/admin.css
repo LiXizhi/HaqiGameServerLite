@@ -1,0 +1,107 @@
+:root {
+    color: #1c2430;
+    background: #f4f1ea;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body {
+    margin: 0 auto;
+    max-width: 1100px;
+    padding: 24px;
+}
+
+h1, h2, h3, p {
+    margin: 0;
+}
+
+h1 {
+    font-size: 28px;
+}
+
+h2 {
+    margin: 28px 0 12px;
+    font-size: 18px;
+}
+
+.top, .tools, .summary, .machine-head, .row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.top {
+    align-items: flex-end;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #d9d3c7;
+}
+
+.summary, .tools, .row, .machine-head {
+    flex-wrap: wrap;
+}
+
+.summary {
+    margin-top: 16px;
+}
+
+.card, table {
+    background: #fffdf8;
+    border: 1px solid #e4ddd0;
+    border-radius: 12px;
+}
+
+.card {
+    padding: 14px 16px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+th, td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee6d9;
+    vertical-align: top;
+}
+
+button, input {
+    font: inherit;
+}
+
+button {
+    background: #1f6f62;
+    color: white;
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+button.quiet {
+    background: #e7efe9;
+    color: #1c2430;
+}
+
+input {
+    border: 1px solid #d9d3c7;
+    border-radius: 8px;
+    padding: 8px;
+    background: white;
+}
+
+label {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.machine {
+    margin-top: 18px;
+}
+
+.empty {
+    color: #667085;
+}
