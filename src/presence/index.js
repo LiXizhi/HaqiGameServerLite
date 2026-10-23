@@ -7,6 +7,8 @@ import {createRegistry} from './gateway/registry.js';
 import {startGateway} from './gateway/server.js';
 import {createLocalSpawner} from './gateway/spawn.js';
 import {loadRoomCatalog} from './protocol.js';
+import {createAnalytics} from './analytics/index.js';
+import {createAuthentication} from './auth.js';
 
 function execText(file, args) {
     return new Promise(resolve => {
@@ -101,17 +103,28 @@ export async function startPresence({
     gatewayPort = Number(process.env.PRESENCE_GATEWAY_PORT || 8797),
     gamePort = Number(process.env.PRESENCE_GAME_PORT || 8798),
     machineId = process.env.PRESENCE_MACHINE_ID || 'local-1',
+    auth = createAuthentication(),
+    allowedOrigins = (process.env.PRESENCE_ALLOWED_ORIGINS || 'https://cdn.keepwork.com,https://keepwork.com').split(',').filter(Boolean),
+    publicSocketUrl = process.env.PRESENCE_PUBLIC_SOCKET_URL || '',
+    analytics = null,
 } = {}) {
     const catalog = loadRoomCatalog();
     const registry = createRegistry({catalog});
-    const local = createLocalSpawner({host, catalog});
-    const gateway = await startGateway({registry, host, port: gatewayPort, local});
+    const local = createLocalSpawner({host, catalog, auth, analytics});
+    let gateway;
+    try {
+        gateway = await startGateway({registry, host, port: gatewayPort, local, auth, allowedOrigins, publicSocketUrl, analytics});
+    } catch (error) {
+        await analytics?.close();
+        throw error;
+    }
     local.gatewayUrl = gateway.url;
     let game = await local.add({port: gamePort, machineId});
     if (!game.ok && game.error === 'EADDRINUSE') {
         game = await local.add({machineId});
     }
     if (!game.ok) {
+        await analytics?.close();
         await gateway.close();
         throw new Error(game.error || 'spawn');
     }
@@ -120,6 +133,7 @@ export async function startPresence({
         game,
         local,
         close: async () => {
+            await analytics?.close();
             await local.close();
             await gateway.close();
         },
@@ -131,7 +145,8 @@ if (entry) {
     const host = process.env.PRESENCE_HOST || '127.0.0.1';
     const gatewayPort = Number(process.env.PRESENCE_GATEWAY_PORT || 8797);
     await replacePreviousPresence({host, port: gatewayPort});
-    const presence = await startPresence({host, gatewayPort});
+    const analytics = process.env.PRESENCE_ANALYTICS === '0' ? null : createAnalytics({directory: process.env.PRESENCE_ANALYTICS_DIR});
+    const presence = await startPresence({host, gatewayPort, analytics});
     console.log(`Gateway: ${presence.gateway.url}/admin`);
     console.log(`Game server: ${presence.game.url}`);
     console.log(`presence ready gateway=${presence.gateway.url}/admin game=${presence.game.url}`);

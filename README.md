@@ -52,4 +52,10 @@ flowchart LR
 
 ## 来源
 
+当前 US 服务器、域名、访问地址和运维信息见 [部署记录](docs/deployment.md)。
+
 2026-10-23 从 `LiXizhi/HaqiWebTools` 的 `HaqiCombatSim/server/presence/` 迁入，服务器测试与 VS Code 启动任务一并迁移。新仓库是后续服务端维护入口；前端项目各自维护业务数据与 UI。
+
+## 用户分析
+
+`npm start` 默认每分钟采样并按北京时间生成每日日报，管理页输入管理口令后查看在线图、活跃、留存和前一天／上周同日对比。统计数据保存在独立分析目录，游戏业务档案仍不保存在世界服。详见 [用户日报与统计口径](docs/analytics.md)。

@@ -1,6 +1,29 @@
 # 三个项目共享服务器
 
-HaqiCombatSim、AI-work-company 和 AIChat 使用同一部署的网关及世界服。各项目配置网关 URL，无需相互引用源码，也无需各自启动一份服务器。当前迁移没有将三个项目的正式 UI 接上线。
+HaqiCombatSim、AI-work-company 和 AIChat 使用同一部署的网关及世界服。各项目配置网关 URL，无需相互引用源码，也无需各自启动一份服务器。2026-10-23 Haqi 本地正式入口已接入认证连接；AI-work-company 和 AIChat 仍待各自接入。Haqi 网页尚未发布本轮修改。
+
+## 2026-10-23 账号认证（当前公网必需）
+
+网关为 `https://us1.gameserver.keepwork.com`。POST `/api/join` 使用 `Authorization: Bearer <Keepwork token>`，正文为 `{username, project, roleId, roomId, x, y}`。`project` 允许 `haqi`、`awc`、`aichat`；`roleId` 为1–64位英文数字、下划线或短横线；房间须以对应 `project:` 开头。不再信任客户端传入的 playerId。
+
+服务端固定请求 `https://api.keepwork.com/core/v0/users/profile`，禁止重定向，8秒超时；返回的 `username` 必须与提交值严格一致。缺少/失效token、用户名不匹配返回401，上游不可用返回503，均拒绝入场。依据 KeepworkSDK 的 `src/core/keepworkSDK.core.ts` 和 `src/core/api-origin.ts`，不是本地解析JWT或信任SDK缓存。
+
+成功应答含服务端生成的 `playerId`、`username`、`instanceId`、WSS `url`、一次性 `ticket`。票据用进程内随机密钥HMAC签名，有效期60秒，绑定账号、项目、角色派生ID、房间及实例；世界服校验并消费票据，拒绝复用/篡改/绕过网关。密钥不落盘，服务重启后旧票据失效；当前同进程多世界服共享验票器，独立进程部署须先设计密钥与票据消费共享。已连接会话最长一小时，之后重连再次核验token；不宣称Keepwork注销可即时踢出其他现存连接。
+
+hello 使用应答的 playerId/instanceId/ticket，token仅用于HTTPS请求头，不进入WebSocket URL、日志或存档。客户端角色编号仅用于账号内区分连接，**尚未查云端角色目录证明角色存在或拥有某项游戏资产**；本轮验收是账号token与用户名一致，不是战斗/资产授权。
+
+`PRESENCE_ALLOWED_ORIGINS` 精确配置页面origin，允许Authorization预检；公网HTTP旧端口返回426。`PRESENCE_PUBLIC_SOCKET_URL` 支持 `{port}`，当前代理支持8798–8817，新增超出范围的世界服需先增加代理路由。认证默认在 `startPresence` 开启；低层 `startGateway/startGameServer` 的 `auth:null` 仅用于隔离协议测试，不得用它替代生产启动入口。
+
+```js
+const client = createPresenceClient({gatewayUrl: 'https://us1.gameserver.keepwork.com'});
+const hello = {username: sdk.user.username, project: 'haqi', roleId: 'role-1', roomId: 'haqi:camp', x: 0, y: 0};
+await client.join(hello, {token: sdk.token});
+await client.connect({...hello, name: '哈奇玩家', appearance: {}});
+await client.waitFor(message => message.type === 'welcome', 10000);
+// 继续每秒move心跳；退出必须close；断线重新join获取新票据。
+```
+
+下文无凭据示例仅适用于显式 `auth:null` 的本地协议测试，不能用于当前公网部署。
 
 ## 标识约定
 
@@ -33,6 +56,6 @@ const heartbeat = setInterval(() => {
 // 离开页面时执行：clearInterval(heartbeat); client.close();
 ```
 
-网关当前不提供跨域 CORS 策略。浏览器接入时由项目部署的同源反向代理转发网关 HTTP 请求；世界服 WebSocket URL 必须对浏览器可达，HTTPS 页面使用 WSS。生产代理地址、认证和证书由部署配置提供，不在源码中猜测。
+网关仅对允许的页面源提供 `/api/join` CORS，生产地址与HTTPS/WSS见上节及部署记录；控制面接口仍由反向代理禁止公网访问。
 
 当前 SDK 是最小客户端：不会自动重连或维护完整角色 UI，调用方需处理关闭/重连、角色切换与消息生命周期。现有服务不替代 Keepwork 登录/云存档，也不替代 AI-work-company 的业务后端。

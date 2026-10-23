@@ -2,7 +2,7 @@
 
 import {startGameServer} from '../gameserver/index.js';
 
-export function createLocalSpawner({host = '127.0.0.1', catalog, limits, gatewayUrl = ''} = {}) {
+export function createLocalSpawner({host = '127.0.0.1', catalog, limits, gatewayUrl = '', auth = null, analytics = null} = {}) {
     const servers = [];
     let seq = 1;
     const spawner = {
@@ -37,6 +37,8 @@ export function createLocalSpawner({host = '127.0.0.1', catalog, limits, gateway
                         gatewayUrl: spawner.gatewayUrl,
                         catalog,
                         limits,
+                        auth,
+                        analytics,
                     });
                     if (!machineId) seq += 1;
                     else {

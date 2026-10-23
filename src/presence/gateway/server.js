@@ -55,11 +55,36 @@ function readBody(request) {
     });
 }
 
-export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken = process.env.PRESENCE_ADMIN_TOKEN || '', local = null} = {}) {
+export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken = process.env.PRESENCE_ADMIN_TOKEN || '', local = null,
+    auth = null, allowedOrigins = [], publicSocketUrl = '', analytics = null} = {}) {
     const adminDir = fileURLToPath(new URL('./admin/', import.meta.url));
     const server = createServer(async (request, response) => {
         try {
             const url = new URL(request.url, 'http://127.0.0.1');
+            if (url.pathname === '/api/join') {
+                const origin = request.headers.origin;
+                if (origin && !allowedOrigins.includes(origin)) {
+                    sendJson(response, 403, {ok: false, error: 'origin'}); return;
+                }
+                if (origin) {
+                    response.setHeader('Access-Control-Allow-Origin', origin);
+                    response.setHeader('Vary', 'Origin');
+                    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+                    response.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
+                }
+                if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+                if (request.method === 'POST' && auth) {
+                    const body = await readBody(request);
+                    const identity = await auth.verify(request.headers.authorization, body);
+                    const result = registry.join({...body, playerId: identity.playerId});
+                    if (!result.ok) { sendJson(response, 503, result); return; }
+                    const socketUrl = publicSocketUrl.replace('{port}', new URL(result.url).port);
+                    sendJson(response, 200, {...result, ...(socketUrl ? {url: socketUrl} : {}),
+                        playerId: identity.playerId, username: identity.username,
+                        ticket: auth.issue(identity, result, body.roomId)});
+                    return;
+                }
+            }
             if (request.method === 'GET' && ADMIN_FILES.has(url.pathname)) {
                 const name = ADMIN_FILES.get(url.pathname);
                 const body = await readFile(join(adminDir, name));
@@ -72,6 +97,21 @@ export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken
             }
             if (request.method === 'GET' && url.pathname === '/api/health') {
                 sendJson(response, 200, {ok: true});
+                return;
+            }
+            if (request.method === 'GET' && url.pathname === '/api/admin/report') {
+                if (!adminToken || request.headers['x-admin-token'] !== adminToken) {
+                    sendJson(response, 401, {ok: false, error: '需要配置并提供管理口令'}); return;
+                }
+                const date = url.searchParams.get('date') || 'today';
+                if (!/^(today|\d{4}-\d{2}-\d{2})$/.test(date)) {
+                    sendJson(response, 400, {ok: false, error: '日期格式错误'}); return;
+                }
+                if (!analytics) { sendJson(response, 503, {ok: false, error: '分析未启用'}); return; }
+                try {
+                    const data = JSON.parse(await readFile(join(analytics.directory, `${date}.json`), 'utf8'));
+                    sendJson(response, 200, data);
+                } catch { sendJson(response, 404, {ok: false, error: '暂无该日报；需先采集数据'}); }
                 return;
             }
             if (request.method === 'GET' && url.pathname === '/api/admin/state') {
@@ -116,7 +156,7 @@ export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken
             }
             sendJson(response, 404, {ok: false, error: 'not-found'});
         } catch (error) {
-            sendJson(response, 400, {ok: false, error: error.message || 'bad-request'});
+            sendJson(response, error.status || 400, {ok: false, error: error.status ? error.message : 'bad-request'});
         }
     });
     return new Promise((resolve, reject) => {

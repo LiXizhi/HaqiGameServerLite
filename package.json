@@ -16,7 +16,7 @@
     "start": "node src/presence/index.js",
     "dev": "node --watch src/presence/index.js",
     "presence": "node src/presence/index.js",
-    "test": "node --test tests/presence_server.test.mjs tests/shared_client.test.mjs",
+    "test": "node --test tests/presence_server.test.mjs tests/shared_client.test.mjs tests/auth.test.mjs tests/analytics.test.mjs",
     "test:load": "node --test tests/presence_capacity.test.mjs",
     "presence:load": "npm run test:load",
     "test:all": "node --test tests/*.test.mjs"

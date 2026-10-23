@@ -145,3 +145,37 @@ document.querySelector('#refresh').addEventListener('click', refresh);
 tokenInput.addEventListener('change', () => sessionStorage.setItem('presence-admin-token', tokenInput.value));
 refresh();
 setInterval(refresh, 2000);
+
+document.querySelector('#load-report').addEventListener('click', async () => {
+    const output = document.querySelector('#report-summary');
+    const canvas = document.querySelector('#online-chart');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const percent = n => n == null ? '暂无基数' : `${(n * 100).toFixed(1)}%`;
+    try {
+        const date = document.querySelector('#report-date').value || 'today';
+        const response = await fetch(`/api/admin/report?date=${encodeURIComponent(date)}`, {headers: headers()});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        const m = data.metrics;
+        output.replaceChildren();
+        for (const text of [
+            `最后采样：${data.lastSampleAt ? new Date(data.lastSampleAt).toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai'}) : '未知'}（北京时间）`,
+            `${data.date}：活跃账号 ${m.active}，首次观测 ${m.newUsers}，采样峰值 ${m.peak ?? '未知'}，平均在线 ${m.average?.toFixed(1) ?? '未知'}`,
+            `与前一天比较：${percent(data.previousDay.activeChange)}；与上周同日比较：${percent(data.previousWeek.activeChange)}（活跃账号变化）`,
+            `次日留存：${percent(data.retention1.rate)}（${data.retention1.returned ?? '未知'}/${data.retention1.cohort ?? '未知'}）；7 日留存：${percent(data.retention7.rate)}（${data.retention7.returned ?? '未知'}/${data.retention7.cohort ?? '未知'}）`,
+            `全天采样覆盖 ${percent(m.coverage)}，丢弃入场记录 ${m.dropped}。不足全天或存在丢弃时，活跃和留存可能低估。首次观测不等于新注册。`,
+        ]) { const p = document.createElement('p'); p.textContent = text; output.append(p); }
+        const max = Math.max(1, ...data.online.filter(n => n !== null));
+        ctx.fillStyle = '#64748b'; ctx.fillText(String(max), 0, 16); ctx.fillText('0', 0, 220);
+        ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2; ctx.beginPath();
+        let connected = false;
+        data.online.forEach((value, index) => {
+            if (value === null) { connected = false; return; }
+            const x = 30 + index / 1439 * 920, y = 220 - value / max * 200;
+            if (connected) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            ctx.fillRect(x, y, 2, 2); connected = true;
+        });
+        ctx.stroke();
+    } catch (error) { output.textContent = error.message || '日报加载失败'; }
+});

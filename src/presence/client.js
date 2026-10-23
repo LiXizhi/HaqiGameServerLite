@@ -58,10 +58,11 @@ export function createPresenceClient({gatewayUrl, WebSocketImpl = globalThis.Web
         sample(id, at = now()) {
             return smoothPosition(peers.get(id), at);
         },
-        async join(body) {
+        async join(body, {token} = {}) {
+            if (token && new URL(gatewayUrl).protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(new URL(gatewayUrl).hostname)) throw new Error('HTTPS required');
             const response = await fetch(`${gatewayUrl}/api/join`, {
                 method: 'POST',
-                headers: {'content-type': 'application/json'},
+                headers: {'content-type': 'application/json', ...(token ? {Authorization: `Bearer ${token}`} : {})},
                 body: JSON.stringify(body),
             });
             const data = await response.json();
@@ -71,7 +72,7 @@ export function createPresenceClient({gatewayUrl, WebSocketImpl = globalThis.Web
         },
         async connect(hello) {
             if (!assignment) throw new Error('join first');
-            selfId = hello.playerId;
+            selfId = assignment.playerId || hello.playerId;
             socket = new WebSocketImpl(assignment.url);
             listen(socket, text => {
                 try {
@@ -83,7 +84,8 @@ export function createPresenceClient({gatewayUrl, WebSocketImpl = globalThis.Web
             await onceOpen(socket);
             this.send({
                 type: 'hello',
-                playerId: hello.playerId,
+                playerId: selfId,
+                ticket: assignment.ticket,
                 name: hello.name,
                 appearance: hello.appearance,
                 roomId: hello.roomId,
