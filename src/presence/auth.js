@@ -10,7 +10,7 @@ export class AuthError extends Error {
 // Keepwork SDK core/getUserProfile: GET /core/v0/users/profile, Bearer token.
 // Never accept an API URL from a caller or forward credentials on redirects.
 export function createAuthentication({fetchImpl = fetch, now = Date.now,
-    secret = randomBytes(32), ticketMs = 60000} = {}) {
+    secret = randomBytes(32), ticketMs = 60000, coordinationDirectory = process.env.KEEPWORK_COORDINATION_DIR} = {}) {
     const used = new Map();
     // Shared by every world server spawned in this gateway process. Count verified
     // accounts across projects/roles/tokens, never IPs or client-supplied player IDs.
@@ -18,7 +18,7 @@ export function createAuthentication({fetchImpl = fetch, now = Date.now,
     const roles = new Map();
     const sign = text => createHmac('sha256', secret).update(text).digest();
     return {
-        privateRooms: createPrivateRooms(),
+        privateRooms: createPrivateRooms({coordinationDirectory}),
         async verify(header, body) {
             if (typeof header !== 'string' || !/^Bearer [^\s]{1,8192}$/.test(header)) throw new AuthError('auth-required');
             if (typeof body.username !== 'string' || !body.username || body.username.length > 128) throw new AuthError('username-required');

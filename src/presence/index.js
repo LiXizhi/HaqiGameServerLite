@@ -108,7 +108,7 @@ export async function startPresence({
     gatewayPort = Number(process.env.PRESENCE_GATEWAY_PORT || 8797),
     gamePort = Number(process.env.PRESENCE_GAME_PORT || 8798),
     machineId = process.env.PRESENCE_MACHINE_ID || 'local-1',
-    auth = createAuthentication(),
+    auth = createAuthentication({coordinationDirectory: process.env.KEEPWORK_COORDINATION_DIR || fileURLToPath(new URL('../../var/coordination/', import.meta.url))}),
     allowedOrigins = (process.env.PRESENCE_ALLOWED_ORIGINS || '*').split(',').map(value => value.trim()).filter(Boolean),
     publicSocketUrl = process.env.PRESENCE_PUBLIC_SOCKET_URL || '',
     analytics = null,
