@@ -22,7 +22,7 @@ export function createCoordination({directory, now = Date.now, maxReceipts = 100
         mkdirSync(directory, {recursive: true, mode: 0o700});
         const temporary = s.file + '.tmp';
         writeFileSync(temporary, JSON.stringify(data), {mode: 0o600});
-        const fd = openSync(temporary, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
+        const fd = openSync(temporary, 'r+'); try { fsyncSync(fd); } finally { closeSync(fd); }
         renameSync(temporary, s.file); s.data = data;
     }
     function elect(s, resource) {
