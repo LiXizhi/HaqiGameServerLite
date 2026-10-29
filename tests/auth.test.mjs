@@ -5,6 +5,14 @@ import {createAuthentication} from '../src/presence/auth.js';
 import {startPresence} from '../src/presence/index.js';
 
 const body = {username: 'alice', project: 'haqi', roleId: 'role-1', roomId: 'haqi:camp', x: 10, y: 20};
+test('operator-configured company verifier is fixed and validates the same identity', async () => {
+    const auth=createAuthentication({profileURL:'https://company.example/profile',fetchImpl:async(url,options)=>{
+        assert.equal(url,'https://company.example/profile');assert.equal(options.redirect,'error');return Response.json({username:'alice'});
+    }});
+    assert.equal((await auth.verify('Bearer valid',{...body,profileURL:'https://evil.example/profile'})).username,'alice');
+    await assert.rejects(auth.verify('Bearer valid',{...body,username:'bob'}),/username-mismatch/);
+    for(const profileURL of ['http://company.example/profile','https://user:secret@company.example/profile','file:///profile'])assert.throws(()=>createAuthentication({profileURL}),/invalid-auth/);
+});
 test('Keepwork Bearer verification checks exact username and fails closed', async () => {
     let calls = 0;
     const auth = createAuthentication({fetchImpl: async (url, options) => {

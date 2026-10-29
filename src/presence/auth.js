@@ -10,7 +10,10 @@ export class AuthError extends Error {
 // Keepwork SDK core/getUserProfile: GET /core/v0/users/profile, Bearer token.
 // Never accept an API URL from a caller or forward credentials on redirects.
 export function createAuthentication({fetchImpl = fetch, now = Date.now,
-    secret = randomBytes(32), ticketMs = 60000} = {}) {
+    secret = randomBytes(32), ticketMs = 60000,
+    profileURL = process.env.PRESENCE_AUTH_PROFILE_URL || 'https://api.keepwork.com/core/v0/users/profile'} = {}) {
+    const verifier = new URL(profileURL);
+    if (verifier.username || verifier.password || verifier.hash || (verifier.protocol !== 'https:' && !(verifier.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(verifier.hostname)))) throw new Error('invalid-auth-profile-url');
     const used = new Map();
     // Shared by every world server spawned in this gateway process. Count verified
     // accounts across projects/roles/tokens, never IPs or client-supplied player IDs.
@@ -29,7 +32,7 @@ export function createAuthentication({fetchImpl = fetch, now = Date.now,
             if (!accountRoom && (body.visibility === 'private' || typeof body.roomId !== 'string' || !body.roomId.startsWith(`${body.project}:`))) throw new AuthError('room', 400);
             let response, profile;
             try {
-                response = await fetchImpl('https://api.keepwork.com/core/v0/users/profile', {
+                response = await fetchImpl(verifier.href, {
                     headers: {Authorization: header, Accept: 'application/json'},
                     redirect: 'error', signal: AbortSignal.timeout(8000),
                 });
