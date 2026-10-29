@@ -90,7 +90,7 @@ export function startGateway({registry, host = '127.0.0.1', port = 0, adminToken
                     const socketUrl = publicSocketUrl.replace('{port}', new URL(result.url).port);
                     sendJson(response, 200, {...result, ...(socketUrl ? {url: socketUrl} : {}),
                         playerId: identity.playerId, username: identity.username, roomId: body.roomId,
-                        ...(identity.roomType === 'account' ? {visibility: 'private', ownerUsername: identity.username, roomType: 'account', capabilities: ['account.relay.v1']} : {}),
+                        ...(identity.roomType === 'account' ? {visibility: 'private', ownerUsername: identity.username, roomType: 'account', capabilities: auth.privateRooms.capabilities} : {}),
                         ticket: auth.issue(identity, result, body.roomId)});
                     return;
                 }

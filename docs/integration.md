@@ -2,7 +2,7 @@
 
 通用私有账号房间使用 `roomType:"account"` 与 `account.relay.v1`，任意应用可独立演进payload协议；服务器只认证、隔离及中继。参见 [私有房间协议](private-rooms.md) 与部署记录。
 
-HaqiCombatSim、AI-work-company 和 AIChat 使用同一部署的网关及世界服。各项目配置网关 URL，无需相互引用源码，也无需各自启动一份服务器。2026-10-23 Haqi 本地正式入口已接入认证连接；AI-work-company 和 AIChat 仍待各自接入。Haqi 网页尚未发布本轮修改。
+HaqiCombatSim、AI-work-company 和 AIChat 使用同一部署的网关及世界服。各项目配置网关 URL，无需相互引用源码，也无需各自启动一份服务器。2026-10-23 Haqi 本地正式入口已接入认证连接；2026-10-24 AI-work-company 首页本地源码已通过 Haqi 共享会话（`project:'awc'`，房间 `awc:city`）接入，已用本地假 Keepwork 鉴权完成双用户互见测试，公网账号入场待验收；AIChat 仍待接入。Haqi 网页尚未发布本轮修改。
 
 ## 2026-10-23 账号认证（当前公网必需）
 

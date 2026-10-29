@@ -40,6 +40,8 @@ Host haqi-us1 us1.gameserver.keepwork.com 43.130.151.173
 
 ## 当前已配置电脑
 
+2026-10-25，当前 macOS 电脑已创建独立 `~/.ssh/haqi_us1_ed25519`，配置 `haqi-us1` 并核验上述服务器指纹。经用户授权的交互登录追加该电脑公钥后，BatchMode 返回 root。私钥仅留本机，未复制其他电脑密钥；密码未写入文件、命令行或仓库。
+
 2026-10-24，Windows Administrator 账户已配置并验证 BatchMode 密钥登录。config 和专用密钥位于 `C:/Users/Administrator/.ssh/`；私钥 ACL 仅 Administrator/SYSTEM。此状态只适用于这台电脑；换电脑按上述流程建立同名别名和独立密钥。
 
 服务发布路径、配置备份及线上验证记录见 [部署文档](deployment.md)。连接配置本身不代表服务已部署。

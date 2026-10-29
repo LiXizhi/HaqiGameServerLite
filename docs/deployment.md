@@ -1,5 +1,15 @@
 # US 部署记录
 
+## 2026-10-25：多电脑消息协调已部署
+
+- 协调源码 `5fa927f9de300097fff647ac2db35f22fa0b6084` 已推送 origin/main。以实际在线 `account-relay-20261024` 为基线，仅叠加协调模块、认证/网关能力声明、私有房间入口和默认目录配置；保留游戏、容量、头像、账号中继和原环境/TLS设置，未部署本地 analytics。
+- 当前运行目录 `/opt/haqi-game-server-lite/releases/coordination-20261025-5fa927f`。新建 systemd drop-in `haqi-game-server-lite.service.d/zz-coordination.conf`；原 `auth.conf` 不变，另存 `auth.conf.before-coordination-20261025`。切换前再次校验运行目录和基线文件散列。
+- 发布包 SHA256：`a24ae944a42510a8d070656915d84b8f14293d8c5b85bfd22efca6fa197208fa`。本机源码测试47/47，线上基线隔离包本机41/41、生产机41/41，全部服务器JS语法通过。初次本机隔离包漏拷贝测试需要的 `.env.example` 导致1项失败，补齐在线示例后重跑通过；没有改变断言或实际凭据。生产测试日志 `/tmp/coordination-20261025-tests.log`。
+- 发布目录的 `var/coordination/` 链接到 `/opt/haqi-game-server-lite/var/coordination`，跨版本保留，不使用临时目录、不提交Git。排名、七天回执及有界检查点持久化，租约不落盘。
+- 服务 active；公网 health200、instances200/CORS *、join预检204/CORS *、缺token账号入场401、管理写接口403。真实HTTP/WebSocket协调通过隔离身份夹具及双world/MCP测试；没有以真实Keepwork账号发送钉钉/飞书消息，不宣称公网用户全链路验收。
+- 回滚前确认仍运行本版本；将 `zz-coordination.conf` 改为非 `.conf` 后缀，daemon-reload/restart，即恢复保留的 account-relay-20261024。保留持久化数据目录。
+- Windows x64、macOS arm64/x64 MCP源码已推送，三平台GitHub构建通过。客户端CDN发布独立于服务器部署；用户仍需更新MCP、登录并逐台显式启用协调。可用性优先仍允许网络分区时重复回复。
+
 ## 2026-10-24：地图服务器列表接口待部署
 
 公网 `GET /api/instances?page=1&pageSize=20` 携带 `Origin: http://127.0.0.1:8791` 实测为 Nginx 403 HTML，缺少 CORS 头，浏览器因而报告 `Failed to fetch`。本地网关已有该接口，线上容量版本尚未包含它；仅修改网页错误文案不能恢复列表。
